@@ -3,133 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>FLAME Wayfinder - Live OSM Base</title>
+    <title>FLAME Wayfinder</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
-        /* CSS Reset & Base Variables */
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        body {
-            background-color: #e5e7eb;
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-        }
-
-        /* Mobile App Container */
-        .app-container {
-            width: 100%;
-            max-width: 430px; 
-            height: 100%;
-            position: relative;
-            background-color: #f3f4f6;
-            overflow: hidden;
-            box-shadow: 0 0 20px rgba(0,0,0,0.1);
-        }
-
-        /* 2. The Real Map Container */
-        #map {
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
-
-        /* Hide the default Leaflet attribution for a cleaner mobile app look 
-           (In production, ensure you attribute OSM elsewhere in the app settings) */
-        .leaflet-control-attribution {
-            display: none;
-        }
-
-        /* Custom Map Marker Style */
-        .custom-marker {
-            width: 24px;
-            height: 24px;
-            background-color: #ef4444;
-            border: 3px solid white;
-            border-radius: 50%;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-
-        .custom-marker:active {
-            transform: scale(1.2);
-        }
-
-        /* The Thumb Zone / Bottom Sheet (Z-index must be higher than Leaflet) */
-        .bottom-sheet {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background: white;
-            border-top-left-radius: 24px;
-            border-top-right-radius: 24px;
-            padding: 20px 20px 40px 20px;
-            box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
-            z-index: 1000; /* Increased to stay above map controls */
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        /* Bottom Sheet UI Elements (Same as before) */
-        .sheet-handle {
-            width: 40px;
-            height: 5px;
-            background-color: #d1d5db;
-            border-radius: 10px;
-            margin: 0 auto 20px auto;
-        }
-
-        .search-container { position: relative; margin-bottom: 20px; }
-        .search-input {
-            width: 100%; padding: 16px 16px 16px 48px; background-color: #f3f4f6;
-            border: none; border-radius: 16px; font-size: 16px; color: #1f2937; outline: none;
-        }
-        .search-input:focus { box-shadow: 0 0 0 2px #3b82f6; }
-        .search-icon {
-            position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
-            width: 20px; height: 20px; fill: #6b7280;
-        }
-
-        .categories {
-            display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none;
-        }
-        .categories::-webkit-scrollbar { display: none; }
+        /* CSS Reset & Base Layout */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: #e5e7eb; height: 100vh; width: 100vw; overflow: hidden; display: flex; justify-content: center; }
         
+        /* Mobile App Container */
+        .app-container { width: 100%; max-width: 430px; height: 100%; position: relative; background-color: #f3f4f6; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+        
+        /* The Map */
+        #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        .leaflet-control-attribution { display: none; }
+
+        /* Custom Map Markers */
+        .custom-marker { background: #3b82f6; border: 3px solid white; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); cursor: pointer; }
+        .custom-marker.temp { background: #ef4444; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+
+        /* Mode Toggle Button */
+        .mode-toggle { position: absolute; top: 20px; right: 20px; z-index: 1000; background: white; padding: 8px 16px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); font-weight: 600; font-size: 14px; cursor: pointer; display: flex; gap: 8px; align-items: center; color: #374151; }
+        .mode-toggle.edit-active { background: #ef4444; color: white; }
+
+        /* Bottom Sheet UI */
+        .bottom-sheet { position: absolute; bottom: 0; left: 0; width: 100%; background: white; border-top-left-radius: 24px; border-top-right-radius: 24px; padding: 20px 20px 40px 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.1); z-index: 1000; transition: transform 0.3s ease-out; }
+        .sheet-handle { width: 40px; height: 5px; background-color: #d1d5db; border-radius: 10px; margin: 0 auto 20px auto; }
+        
+        /* View States */
+        #defaultView, #locationView, #editFormView { display: none; flex-direction: column; gap: 12px; }
+        #defaultView { display: block; } /* Visible by default */
+
+        /* Search Bar & Categories */
+        .search-container { position: relative; margin-bottom: 20px; }
+        .search-input { width: 100%; padding: 16px 16px 16px 48px; background-color: #f3f4f6; border: none; border-radius: 16px; font-size: 16px; outline: none; color: #1f2937; }
+        .search-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; fill: #6b7280; }
+        
+        .categories { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+        .categories::-webkit-scrollbar { display: none; }
         .category-chip { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 72px; cursor: pointer; }
         .chip-icon { width: 56px; height: 56px; background-color: #f3f4f6; border-radius: 16px; display: flex; justify-content: center; align-items: center; font-size: 24px; }
         .chip-label { font-size: 12px; color: #4b5563; font-weight: 500; }
 
-        .location-card { display: none; flex-direction: column; gap: 12px; }
+        /* Location Info Card */
         .location-image-placeholder { width: 100%; height: 140px; background-color: #e5e7eb; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 14px; }
         .location-header h2 { font-size: 20px; color: #111827; margin-bottom: 4px; }
         .location-header p { font-size: 14px; color: #6b7280; }
         
-        .btn-navigate {
-            width: 100%; padding: 16px; background-color: #2563eb; color: white;
-            border: none; border-radius: 16px; font-size: 16px; font-weight: 600;
-            cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 8px;
-        }
+        /* Edit Form Elements */
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase; }
+        .form-input { width: 100%; padding: 12px; background: #f9fafb; border: 1px solid #d1d5db; border-radius: 12px; font-size: 16px; }
+        .form-row { display: flex; gap: 12px; }
+
+        /* Buttons */
+        .btn-primary { width: 100%; padding: 16px; background-color: #2563eb; color: white; border: none; border-radius: 16px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+        .btn-secondary { width: 100%; padding: 16px; background-color: #f3f4f6; color: #374151; border: none; border-radius: 16px; font-size: 16px; font-weight: 600; cursor: pointer; }
+        .btn-save { background-color: #10b981; }
     </style>
 </head>
 <body>
 
 <div class="app-container">
-    
     <div id="map"></div>
+    
+    <div class="mode-toggle" id="modeToggleBtn">
+        <span>👁️ Use Mode</span>
+    </div>
 
     <div class="bottom-sheet" id="bottomSheet">
         <div class="sheet-handle"></div>
@@ -137,9 +81,8 @@
         <div id="defaultView">
             <div class="search-container">
                 <svg class="search-icon" viewBox="0 0 24 24"><path d="M10 2a8 8 0 105.293 14.707l5 5a1 1 0 001.414-1.414l-5-5A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z"/></svg>
-                <input type="text" class="search-input" placeholder="Where do you want to go?">
+                <input type="text" class="search-input" placeholder="Search campus...">
             </div>
-
             <div class="categories">
                 <div class="category-chip"><div class="chip-icon">📚</div><span class="chip-label">Classes</span></div>
                 <div class="category-chip"><div class="chip-icon">☕</div><span class="chip-label">Food</span></div>
@@ -149,100 +92,188 @@
             </div>
         </div>
 
-        <div class="location-card" id="locationView">
-            <div class="location-image-placeholder">
-                [ Real Photo of the Building ]
-            </div>
+        <div id="locationView">
+            <div class="location-image-placeholder">Building Image</div>
             <div class="location-header">
-                <h2 id="locationTitle">Campus Center</h2>
-                <p id="locationDesc">General Campus Area</p>
+                <h2 id="viewName">Name</h2>
+                <p id="viewDesc">Description</p>
             </div>
-            <button class="btn-navigate">
-                <svg width="20" height="20" fill="white" viewBox="0 0 24 24"><path d="M21.5 11.1l-17-9A1 1 0 003 3v18a1 1 0 001.5.9l17-9a1 1 0 000-1.8zM5 18.2V5.8l11.7 6.2L5 18.2z"/></svg>
-                Start Navigation
-            </button>
-            <button class="btn-navigate" style="background-color: #f3f4f6; color: #374151; margin-top: 0;" id="closeLocationBtn">
-                Back to Search
-            </button>
+            <button class="btn-primary">Start Navigation</button>
+            <button class="btn-secondary" onclick="switchView('default')">Back</button>
         </div>
 
+        <div id="editFormView">
+            <div class="location-header">
+                <h2>Add New Location</h2>
+                <p id="saveStatusText">Syncs instantly to cloud.</p>
+            </div>
+            <div class="form-group">
+                <label>Location Name</label>
+                <input type="text" id="inputName" class="form-input" placeholder="e.g. Chanakya Block">
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <input type="text" id="inputDesc" class="form-input" placeholder="e.g. Academic block">
+            </div>
+            <div class="form-row">
+                <button class="btn-primary btn-save" id="saveLocationBtn">Save to Database</button>
+                <button class="btn-secondary" id="cancelEditBtn">Cancel</button>
+            </div>
+        </div>
     </div>
-
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
 <script>
-    // --- 1. INITIALIZE THE REAL MAP ---
-    // Coordinates for FLAME University (approximate campus center)
-    const flameCoords = [18.5348, 73.7431]; // Adjusted slightly for better centering on the Lavale campus map features
+    // --- 1. INITIALIZE SUPABASE ---
+    const supabaseUrl = 'https://thmtspkywtzvqyfuxtgg.supabase.co'; 
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRobXRzcGt5d3R6dnF5ZnV4dGdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjAxNTgsImV4cCI6MjA5Nzg5NjE1OH0.sCNp2LRxOWFEPgPtEfqSGGA9N0bDlSg9kWrHRsQMoro'; 
+    
+    // Create the client
+    const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-    // Initialize the map, set view to FLAME with a high zoom level (16)
-    // Zoom control is moved to top right to avoid our bottom sheet
-    const map = L.map('map', {
-        zoomControl: false 
-    }).setView(flameCoords, 16);
-
-    // Add zoom control manually to the top right
-    L.control.zoom({
-        position: 'topright'
+    // --- 2. INITIALIZE MAP ---
+    // Centered on FLAME University Sports Complex area
+    const map = L.map('map', { zoomControl: false }).setView([18.5350, 73.7415], 17);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+        maxZoom: 20 
     }).addTo(map);
 
-    // Load OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-    }).addTo(map);
+    let isEditMode = false;
+    let tempMarker = null;
+    let mapLayerGroup = L.layerGroup().addTo(map);
 
+    // --- 3. FETCH DATA FROM SUPABASE ---
+    async function loadLocations() {
+        const { data, error } = await supabase
+            .from('flame_locations')
+            .select('*');
+            
+        if (error) {
+            console.error('Error fetching data from Supabase:', error);
+            return;
+        }
 
-    // --- 2. ADD A CUSTOM MARKER ---
-    // We create a custom HTML marker rather than the default blue pin 
-    // to match our modern UI design.
-    const customIcon = L.divIcon({
-        className: 'custom-marker',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12] // Centers the icon over the coordinate
-    });
-
-    // Drop the marker near the center of campus
-    const marker = L.marker([18.5340, 73.7435], { icon: customIcon }).addTo(map);
-
-
-    // --- 3. UI INTERACTION LOGIC ---
-    const defaultView = document.getElementById('defaultView');
-    const locationView = document.getElementById('locationView');
-    const closeBtn = document.getElementById('closeLocationBtn');
-    const locationTitle = document.getElementById('locationTitle');
-    const locationDesc = document.getElementById('locationDesc');
-
-    // When the map marker is clicked
-    marker.on('click', function() {
-        // Update the bottom sheet content
-        locationTitle.innerText = "Central Campus Area";
-        locationDesc.innerText = "FLAME University, Lavale";
+        mapLayerGroup.clearLayers(); // Clear existing pins before drawing new ones
         
-        // Switch the view
-        defaultView.style.display = 'none';
-        locationView.style.display = 'flex';
-        
-        // Optional: Center the map on the clicked marker smoothly
-        map.flyTo(marker.getLatLng(), 17);
-    });
+        // Draw all pins from the database
+        data.forEach((loc) => {
+            const icon = L.divIcon({ className: 'custom-marker', iconSize: [16, 16] });
+            const marker = L.marker([loc.lat, loc.lng], { icon: icon }).addTo(mapLayerGroup);
+            
+            // Add click event for standard navigation mode
+            marker.on('click', () => {
+                if(isEditMode) return; // Ignore clicks if editing
+                document.getElementById('viewName').innerText = loc.name;
+                document.getElementById('viewDesc').innerText = loc.description;
+                switchView('location');
+            });
+        });
+    }
 
-    // When the close button is clicked
-    closeBtn.addEventListener('click', () => {
-        locationView.style.display = 'none';
-        defaultView.style.display = 'block';
-    });
+    // Run fetch on initial load
+    loadLocations();
 
-    // Optional: Clicking anywhere on the empty map closes the location card
-    map.on('click', function() {
-        if (locationView.style.display === 'flex') {
-            locationView.style.display = 'none';
-            defaultView.style.display = 'block';
+    // --- 4. UI VIEW SWITCHER ---
+    function switchView(view) {
+        document.getElementById('defaultView').style.display = view === 'default' ? 'block' : 'none';
+        document.getElementById('locationView').style.display = view === 'location' ? 'flex' : 'none';
+        document.getElementById('editFormView').style.display = view === 'edit' ? 'flex' : 'none';
+    }
+
+    // --- 5. MODE TOGGLE LOGIC ---
+    const modeBtn = document.getElementById('modeToggleBtn');
+    modeBtn.addEventListener('click', () => {
+        if (!isEditMode) {
+            // Require a simple password to enter edit mode
+            const pwd = prompt("Enter Admin Password (hint: flame)");
+            if (pwd === "flame") {
+                isEditMode = true;
+                modeBtn.innerHTML = "<span>✏️ Edit Mode Active</span>";
+                modeBtn.classList.add('edit-active');
+                switchView('default'); 
+            } else {
+                alert("Incorrect password.");
+            }
+        } else {
+            // Exit edit mode
+            isEditMode = false;
+            modeBtn.innerHTML = "<span>👁️ Use Mode</span>";
+            modeBtn.classList.remove('edit-active');
+            if (tempMarker) map.removeLayer(tempMarker); // Clean up unsaved pin
+            switchView('default');
         }
     });
 
-</script>
+    // --- 6. DROPPING PINS ---
+    map.on('click', function(e) {
+        if (!isEditMode) { 
+            switchView('default'); // Close info cards if clicking empty map in use mode
+            return; 
+        }
 
+        // Place a temporary pulsing pin
+        if (tempMarker) map.removeLayer(tempMarker);
+        const tempIcon = L.divIcon({ className: 'custom-marker temp', iconSize: [20, 20] });
+        tempMarker = L.marker(e.latlng, { icon: tempIcon }).addTo(map);
+
+        // Reset and show the form
+        document.getElementById('inputName').value = '';
+        document.getElementById('inputDesc').value = '';
+        document.getElementById('saveStatusText').innerText = "Syncs instantly to cloud.";
+        document.getElementById('saveStatusText').style.color = "#6b7280";
+        switchView('edit');
+    });
+
+    // --- 7. WRITE DATA TO SUPABASE ---
+    document.getElementById('saveLocationBtn').addEventListener('click', async () => {
+        if (!tempMarker) return;
+        
+        const name = document.getElementById('inputName').value;
+        const desc = document.getElementById('inputDesc').value;
+        
+        if (!name) return alert("Please enter a location name.");
+
+        // UI feedback while saving
+        document.getElementById('saveStatusText').innerText = "Saving to database...";
+        document.getElementById('saveStatusText').style.color = "#2563eb";
+
+        // Insert into Supabase table
+        const { error } = await supabase
+            .from('flame_locations')
+            .insert([
+                { 
+                    name: name, 
+                    description: desc, 
+                    lat: tempMarker.getLatLng().lat, 
+                    lng: tempMarker.getLatLng().lng 
+                }
+            ]);
+
+        if (error) {
+            console.error("Error saving to Supabase:", error);
+            alert("Failed to save. Check console for details.");
+            return;
+        }
+
+        // Cleanup temporary marker
+        map.removeLayer(tempMarker);
+        tempMarker = null;
+        switchView('default');
+        
+        // Reload map pins from cloud to confirm save
+        loadLocations(); 
+    });
+
+    // Cancel edit
+    document.getElementById('cancelEditBtn').addEventListener('click', () => {
+        if (tempMarker) map.removeLayer(tempMarker);
+        tempMarker = null;
+        switchView('default');
+    });
+
+</script>
 </body>
 </html>
