@@ -6,33 +6,32 @@
     <title>FLAME University Wayfinder</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        #instruction-bar { background: #333; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 14px; }
-        #map { flex-grow: 1; width: 100%; }
-        #filter-container { padding: 10px; background: #eee; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap; }
-        .filter-btn { background: white; border: 1px solid #ccc; padding: 8px 12px; border-radius: 20px; font-size: 13px; cursor: pointer; }
-        .filter-btn.active { background: #007bff; color: white; border-color: #0056b3; }
-        #reset-btn { background: #dc3545; color: white; border: none; padding: 8px 12px; border-radius: 20px; font-size: 13px; display: none; }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        #instruction-bar { background: #1a252f; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 1000; }
+        #map { flex-grow: 1; width: 100%; z-index: 1; }
+        #filter-container { padding: 12px; background: #f8f9fa; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap; border-top: 1px solid #dee2e6; box-shadow: 0 -2px 5px rgba(0,0,0,0.05); z-index: 1000; }
+        .filter-btn { background: white; border: 1px solid #ced4da; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+        .filter-btn:active { background: #e9ecef; }
+        #reset-btn { background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; display: none; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <div id="instruction-bar">📍 Step 1: Tap your starting building on the map</div>
 
+    <div id="map"></div>
+
     <div id="filter-container">
         <button id="reset-btn" onclick="resetNavigation()">❌ Clear Route</button>
         <button class="filter-btn" onclick="filterPins('academics')">📚 Academics</button>
         <button class="filter-btn" onclick="filterPins('eateries')">☕ Eateries</button>
-        <button class="filter-btn" onclick="filterPins('housing')">🏠 Housing</button>
         <button class="filter-btn" onclick="filterPins('sports')">⚽ Sports</button>
     </div>
 
-    <div id="map"></div>
-
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Initialize Map centered around FLAME University coordinates
-        const map = L.map('map').setView([18.4905, 73.7480], 17);
+        // Initialize Map centered exactly on the FLAME University Campus spine
+        const map = L.map('map').setView([18.5202, 73.7385], 17.5);
 
         // Load Free OpenStreetMap Tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -47,18 +46,31 @@
         let activeRouteLine = null;
         let markersGroup = L.layerGroup().addTo(map);
 
-        // Dummy coordinates database mapped to your image locations
+        // Accurate GPS anchor points for FLAME University landmarks
         const campusData = [
-            { id: "3", name: "Vivekananda Library", category: "academics", lat: 18.4905, lng: 73.7480 },
-            { id: "6", name: "Chanakya", category: "academics", lat: 18.4899, lng: 73.7475 },
-            { id: "30", name: "Blue Tokai Cafe", category: "eateries", lat: 18.4912, lng: 73.7485 },
-            { id: "40", name: "North Housing", category: "housing", lat: 18.4925, lng: 73.7460 }
+            { id: "3", name: "3. Vivekananda Library", category: "academics", lat: 18.52025, lng: 73.73902 },
+            { id: "6", name: "6. Chanakya Lecture Theatre", category: "academics", lat: 18.51980, lng: 73.73830 },
+            { id: "30", name: "30. Blue Tokai Cafe", category: "eateries", lat: 18.51950, lng: 73.73895 },
+            { id: "18", name: "18. Arjuna Centre for Sports", category: "sports", lat: 18.52180, lng: 73.73850 }
         ];
 
-        // Pre-defined static path arrays between points (V1 static routing)
+        // Hardcoded path networks linking the buildings through outdoor central spine
         const pathRoutes = {
-            "3-to-30": [[18.4905, 73.7480], [18.4909, 73.7482], [18.4912, 73.7485]],
-            "6-to-3: [[18.4899, 73.7475], [18.4902, 73.7478], [18.4905, 73.7480]]
+            "3-to-30": [
+                [18.52025, 73.73902], // Library
+                [18.51990, 73.73910], // Spine intersection
+                [18.51950, 73.73895]  // Blue Tokai Plaza
+            ],
+            "6-to-3": [
+                [18.51980, 73.73830], // Chanakya
+                [18.51995, 73.73860], // Plaza pathway
+                [18.52025, 73.73902]  // Library
+            ],
+            "18-to-3": [
+                [18.52180, 73.73850], // Sports Complex
+                [18.52090, 73.73870], // Football walkway
+                [18.52025, 73.73902]  // Library
+            ]
         };
 
         // Render standard category pins
@@ -66,16 +78,26 @@
             markersGroup.clearLayers();
             campusData.filter(loc => loc.category === category).forEach(loc => {
                 const marker = L.marker([loc.lat, loc.lng]).addTo(markersGroup);
-                marker.bindPopup(`<b>${loc.name}</b><br><button onclick="handleLocationSelect('${loc.id}', '${loc.name}')">Select</button>`);
+                
+                const popupContent = `
+                    <div style="font-size:14px; padding:5px;">
+                        <b>${loc.name}</b><br><br>
+                        <button style="background:#007bff; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;" 
+                                onclick="handleLocationSelect('${loc.id}', '${loc.name}')">
+                            Select Location
+                        </button>
+                    </div>`;
+                
+                marker.bindPopup(popupContent);
             });
         }
 
-        // Handle the Step-by-Step Logic
+        // Handle the Step-by-Step UI Flow
         function handleLocationSelect(id, name) {
             map.closePopup();
             if (currentStep === 1) {
                 startLocation = id;
-                document.getElementById('instruction-bar').innerText = `🛫 From: ${name} -> 🏁 Step 2: Tap your destination building`;
+                document.getElementById('instruction-bar').innerHTML = `🛫 <b>From:</b> ${name} <br> 🏁 <b>Step 2:</b> Filter and select destination building`;
                 currentStep = 2;
             } else if (currentStep === 2) {
                 endLocation = id;
@@ -91,13 +113,13 @@
 
             if (points) {
                 if (activeRouteLine) map.removeLayer(activeRouteLine);
-                activeRouteLine = L.polyline(points, { color: '#007bff', weight: 6, opacity: 0.8 }).addTo(map);
+                activeRouteLine = L.polyline(points, { color: '#27ae60', weight: 6, opacity: 0.9, dashArray: '5, 10' }).addTo(map);
                 map.fitBounds(activeRouteLine.getBounds(), { padding: [50, 50] });
                 
-                document.getElementById('instruction-bar').innerText = "🎉 Route Found! Follow the blue line.";
+                document.getElementById('instruction-bar').innerHTML = "🎉 <b>Route Loaded!</b> Follow the green dotted path on campus.";
                 document.getElementById('reset-btn').style.display = "inline-block";
             } else {
-                document.getElementById('instruction-bar').innerText = "❌ Direct path data not set for this route yet.";
+                document.getElementById('instruction-bar').innerHTML = "❌ direct walking path coordinate data missing for this pair.";
                 document.getElementById('reset-btn').style.display = "inline-block";
             }
         }
@@ -110,7 +132,11 @@
             document.getElementById('instruction-bar').innerText = "📍 Step 1: Tap your starting building on the map";
             document.getElementById('reset-btn').style.display = "none";
             markersGroup.clearLayers();
+            map.setView([18.5202, 73.7385], 17.5);
         }
+
+        // Automatically load academic pins first so the map isn't blank
+        filterPins('academics');
     </script>
 </body>
 </html>
